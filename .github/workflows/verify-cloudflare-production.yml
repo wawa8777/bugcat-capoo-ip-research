@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   publish-and-verify:
@@ -23,6 +24,22 @@ jobs:
       - name: Check out the committed website
         uses: actions/checkout@v4
 
+      - name: Inspect configured deployment variable names only
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          echo "Repository-level Actions variable names (values intentionally hidden):"
+          curl -sS --max-time 10 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/variables?per_page=100" -o /tmp/repo-vars.json
+          node -e "try { const x=require('/tmp/repo-vars.json'); console.log((x.variables||[]).map(v=>v.name).join('\\n')||'(none or unavailable)') } catch(e) { console.log('(unable to parse repository variable names)') }"
+          echo "Production environment variable names (values intentionally hidden):"
+          curl -sS --max-time 10 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/environments/production/variables?per_page=100" -o /tmp/env-vars.json
+          node -e "try { const x=require('/tmp/env-vars.json'); console.log((x.variables||[]).map(v=>v.name).join('\\n')||'(none or unavailable)') } catch(e) { console.log('(unable to parse production variable names)') }"
+          echo "Repository secret names only (secret values are never requested):"
+          code="$(curl -sS --max-time 10 -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/secrets?per_page=100" -o /tmp/secret-names.json)"
+          echo "Secret metadata API status: $code"
+          node -e "try { const x=require('/tmp/secret-names.json'); console.log((x.secrets||[]).map(v=>v.name).join('\\n')||'(none, unauthorized, or unavailable)') } catch(e) { console.log('(unable to parse secret names)') }"
       - name: Detect available Cloudflare deployment route
         id: cf-route
         shell: bash
