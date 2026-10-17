@@ -17,7 +17,7 @@ jobs:
   verify-production:
     name: Confirm deployed mobile heading fix
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
       - name: Verify the live Cloudflare Pages response
         shell: bash
@@ -28,7 +28,7 @@ jobs:
           const requiredRule = 'html body main .section>.section-head';
           const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-          for (let attempt = 1; attempt <= 18; attempt++) {
+          for (let attempt = 1; attempt <= 5; attempt++) {
             try {
               const url = new URL(target);
               url.searchParams.set('_deployment_probe', String(Date.now()) + '-' + attempt);
@@ -38,7 +38,7 @@ jobs:
                   'cache-control': 'no-cache, no-store, max-age=0',
                   'pragma': 'no-cache'
                 },
-                signal: AbortSignal.timeout(15000)
+                signal: AbortSignal.timeout(8000)
               });
               const html = await response.text();
               const markerPresent = html.includes(expectedMarker);
@@ -71,10 +71,10 @@ jobs:
               console.log(JSON.stringify({attempt, requestError: String(error)}));
             }
 
-            if (attempt < 18) {
-              await delay(10000);
+            if (attempt < 5) {
+              await delay(4000);
             }
           }
 
-          throw new Error('Production verification failed: the live URL did not serve the expected revision within 3 minutes.');
+          throw new Error('Production verification failed: the live URL did not serve the expected revision within 60 seconds.');
           NODE
