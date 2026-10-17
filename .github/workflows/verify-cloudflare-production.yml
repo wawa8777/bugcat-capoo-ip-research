@@ -16,6 +16,7 @@ permissions:
 jobs:
   publish-and-verify:
     name: Publish and verify production content
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
