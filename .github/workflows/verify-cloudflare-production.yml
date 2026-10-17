@@ -1,0 +1,80 @@
+name: Verify Cloudflare production content
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "_headers"
+      - ".github/workflows/verify-cloudflare-production.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    name: Confirm deployed mobile heading fix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify the live Cloudflare Pages response
+        shell: bash
+        run: |
+          node <<'NODE'
+          const target = 'https://bugcat-capoo-ip-research.pages.dev/';
+          const expectedMarker = 'mobile-headings-universal-v3';
+          const requiredRule = 'html body main .section>.section-head';
+          const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          for (let attempt = 1; attempt <= 18; attempt++) {
+            try {
+              const url = new URL(target);
+              url.searchParams.set('_deployment_probe', String(Date.now()) + '-' + attempt);
+              const response = await fetch(url, {
+                cache: 'no-store',
+                headers: {
+                  'cache-control': 'no-cache, no-store, max-age=0',
+                  'pragma': 'no-cache'
+                },
+                signal: AbortSignal.timeout(15000)
+              });
+              const html = await response.text();
+              const markerPresent = html.includes(expectedMarker);
+              const universalRulePresent = html.includes(requiredRule);
+              const result = {
+                attempt,
+                httpStatus: response.status,
+                markerPresent,
+                universalRulePresent,
+                cacheControl: response.headers.get('cache-control'),
+                cfCacheStatus: response.headers.get('cf-cache-status'),
+                age: response.headers.get('age'),
+                returnedBytes: Buffer.byteLength(html),
+                sampleTitle: html.match(/<title[^>]*>(.*?)<\\/title>/i)?.[1] ?? null
+              };
+              console.log(JSON.stringify(result));
+
+              if (response.ok && markerPresent && universalRulePresent) {
+                console.log('PASS: production serves the expected revision and universal mobile heading CSS.');
+                process.exit(0);
+              }
+              if (!response.ok) {
+                console.log('Production endpoint is not returning a successful response yet.');
+              } else if (!markerPresent) {
+                console.log('The production HTML does not yet contain the expected revision marker.');
+              } else {
+                console.log('The revision marker exists, but the mobile heading CSS selector is missing.');
+              }
+            } catch (error) {
+              console.log(JSON.stringify({attempt, requestError: String(error)}));
+            }
+
+            if (attempt < 18) {
+              await delay(10000);
+            }
+          }
+
+          throw new Error('Production verification failed: the live URL did not serve the expected revision within 3 minutes.');
+          NODE
