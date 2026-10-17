@@ -17,27 +17,31 @@ jobs:
   publish-and-verify:
     name: Publish and verify production content
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - name: Check out the committed website
         uses: actions/checkout@v4
 
-      - name: Detect Cloudflare deployment credentials without exposing values
-        id: cf-credentials
+      - name: Detect available Cloudflare deployment route
+        id: cf-route
         shell: bash
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.WRANGLER_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || vars.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID }}
+          CF_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK || secrets.CF_PAGES_DEPLOY_HOOK || secrets.CLOUDFLARE_DEPLOY_HOOK_URL || vars.CLOUDFLARE_PAGES_DEPLOY_HOOK || vars.CF_PAGES_DEPLOY_HOOK }}
         run: |
           if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "Cloudflare API deployment credentials are available."
+            echo "method=wrangler" >> "$GITHUB_OUTPUT"
+            echo "Direct upload is available through configured Cloudflare credentials."
+          elif [ -n "$CF_DEPLOY_HOOK" ]; then
+            echo "method=hook" >> "$GITHUB_OUTPUT"
+            echo "A Cloudflare Pages deploy hook is available."
           else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Cloudflare API token/account ID are not configured as GitHub Actions secrets; direct API deployment will be skipped."
+            echo "method=none" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Cloudflare API credential pair or Pages deploy hook was found in the recognized repository secrets/variables."
           fi
 
-      - name: Stage only public website files
+      - name: Stage the complete static website payload
         shell: bash
         run: |
           set -euo pipefail
@@ -46,15 +50,31 @@ jobs:
           cp _headers site/_headers
           test -s site/index.html
           test -s site/_headers
-          echo "Staged index.html and _headers only."
+          grep -q 'mobile-headings-universal-v3' site/index.html
+          grep -q 'html body main .section>.section-head' site/index.html
+          echo "Staged both production files and validated the layout revision."
 
-      - name: Deploy latest website to Cloudflare Pages
-        if: steps.cf-credentials.outputs.configured == 'true'
+      - name: Deploy using Cloudflare Pages Direct Upload
+        if: steps.cf-route.outputs.method == 'wrangler'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.WRANGLER_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || vars.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID }}
         run: npx --yes wrangler@4 pages deploy site --project-name=bugcat-capoo-ip-research --branch=main
+
+      - name: Trigger Cloudflare Pages Deploy Hook
+        if: steps.cf-route.outputs.method == 'hook'
+        env:
+          CF_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK || secrets.CF_PAGES_DEPLOY_HOOK || secrets.CLOUDFLARE_DEPLOY_HOOK_URL || vars.CLOUDFLARE_PAGES_DEPLOY_HOOK || vars.CF_PAGES_DEPLOY_HOOK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --max-time 20 --output /tmp/deploy-hook-response.txt --write-out '%{http_code}' --request POST "$CF_DEPLOY_HOOK")"
+          echo "Cloudflare deploy-hook HTTP status: $code"
+          case "$code" in
+            2??) echo "Cloudflare Pages deploy hook accepted the deployment trigger." ;;
+            *) echo "::error::Cloudflare deploy hook failed with HTTP $code."; cat /tmp/deploy-hook-response.txt; exit 1 ;;
+          esac
 
       - name: Verify the actual production response
         shell: bash
@@ -66,7 +86,7 @@ jobs:
           const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
           let lastResult = {};
 
-          for (let attempt = 1; attempt <= 5; attempt++) {
+          for (let attempt = 1; attempt <= 15; attempt++) {
             try {
               const url = new URL(target);
               url.searchParams.set('_deployment_probe', String(Date.now()) + '-' + attempt);
@@ -76,7 +96,7 @@ jobs:
                   'cache-control': 'no-cache, no-store, max-age=0',
                   'pragma': 'no-cache'
                 },
-                signal: AbortSignal.timeout(8000)
+                signal: AbortSignal.timeout(10000)
               });
               const html = await response.text();
               lastResult = {
@@ -100,7 +120,7 @@ jobs:
               lastResult = {attempt, requestError: String(error)};
               console.log(JSON.stringify(lastResult));
             }
-            if (attempt < 5) await delay(4000);
+            if (attempt < 15) await delay(8000);
           }
           throw new Error('Production is still not serving the latest website revision. Last probe: ' + JSON.stringify(lastResult));
           NODE
