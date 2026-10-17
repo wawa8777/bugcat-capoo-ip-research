@@ -53,6 +53,58 @@
     overflow-wrap:anywhere!important;
   }
 }
+
+/* Final mobile heading override: applies to every numbered section, not just section 06. */
+@media screen and (max-width:760px){
+  html body main .section>.section-head{
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    column-gap:0!important;
+    row-gap:0!important;
+    width:100%!important;
+    margin:0 0 32px!important;
+  }
+  html body main .section>.section-head>.num{
+    display:block!important;
+    position:static!important;
+    float:none!important;
+    order:0!important;
+    width:auto!important;
+    max-width:none!important;
+    margin:0 0 14px!important;
+    padding:0!important;
+    line-height:1.5!important;
+  }
+  html body main .section>.section-head>div:not(.num){
+    display:block!important;
+    position:static!important;
+    order:1!important;
+    float:none!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    grid-column:1/-1!important;
+  }
+  html body main .section>.section-head h2{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    margin:0 0 20px!important;
+    font-size:clamp(30px,8vw,40px)!important;
+    line-height:1.5!important;
+    letter-spacing:-.025em!important;
+    overflow-wrap:anywhere!important;
+  }
+  html body main .section>.section-head .section-lead{
+    width:100%!important;
+    max-width:100%!important;
+    font-size:17px!important;
+    line-height:1.9!important;
+  }
+}
+
 </style>
 </head>
 <body>
