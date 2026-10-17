@@ -22,7 +22,7 @@ jobs:
       - name: Verify the live Cloudflare Pages response
         shell: bash
         run: |
-          node <<'NODE'
+          node --input-type=module <<'NODE'
           const target = 'https://bugcat-capoo-ip-research.pages.dev/';
           const expectedMarker = 'mobile-headings-universal-v3';
           const requiredRule = 'html body main .section>.section-head';
@@ -52,7 +52,7 @@ jobs:
                 cfCacheStatus: response.headers.get('cf-cache-status'),
                 age: response.headers.get('age'),
                 returnedBytes: Buffer.byteLength(html),
-                sampleTitle: html.match(/<title[^>]*>(.*?)<\\/title>/i)?.[1] ?? null
+                sampleTitle: html.split('<title>')[1]?.split('</title>')[0] ?? null
               };
               console.log(JSON.stringify(result));
 
