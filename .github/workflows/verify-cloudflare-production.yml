@@ -45,13 +45,20 @@ jobs:
         shell: bash
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.WRANGLER_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN || secrets.CLOUDFLARE_PAGES_TOKEN || vars.CLOUDFLARE_API_TOKEN || vars.CF_API_TOKEN || vars.CLOUDFLARE_PAGES_API_TOKEN || vars.WRANGLER_API_TOKEN || vars.CLOUDFLARE_TOKEN || vars.CF_TOKEN }}
+          CF_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CF_API_KEY || vars.CLOUDFLARE_API_KEY || vars.CF_API_KEY }}
+          CF_API_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL || secrets.CF_EMAIL || secrets.CF_API_EMAIL || vars.CLOUDFLARE_EMAIL || vars.CF_EMAIL || vars.CF_API_EMAIL }}
           CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || vars.CF_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT || secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT }}
-          CF_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK || secrets.CF_PAGES_DEPLOY_HOOK || secrets.CLOUDFLARE_DEPLOY_HOOK_URL || vars.CLOUDFLARE_PAGES_DEPLOY_HOOK || vars.CF_PAGES_DEPLOY_HOOK || vars.CLOUDFLARE_DEPLOY_HOOK_URL }}
+          CF_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK || secrets.CF_PAGES_DEPLOY_HOOK || secrets.CLOUDFLARE_DEPLOY_HOOK_URL || secrets.CLOUDFLARE_DEPLOY_HOOK || secrets.DEPLOY_HOOK_URL || vars.CLOUDFLARE_PAGES_DEPLOY_HOOK || vars.CF_PAGES_DEPLOY_HOOK || vars.CLOUDFLARE_DEPLOY_HOOK_URL || vars.CLOUDFLARE_DEPLOY_HOOK || vars.DEPLOY_HOOK_URL }}
         run: |
           if [ -n "$CF_API_TOKEN" ]; then echo "::add-mask::$CF_API_TOKEN"; fi
+          if [ -n "$CF_API_KEY" ]; then echo "::add-mask::$CF_API_KEY"; fi
+          if [ -n "$CF_API_EMAIL" ]; then echo "::add-mask::$CF_API_EMAIL"; fi
           if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ACCOUNT_ID" ]; then
             echo "method=wrangler" >> "$GITHUB_OUTPUT"
-            echo "Direct upload is available through configured Cloudflare credentials."
+            echo "Direct upload is available through Cloudflare API token credentials."
+          elif [ -n "$CF_API_KEY" ] && [ -n "$CF_API_EMAIL" ] && [ -n "$CF_ACCOUNT_ID" ]; then
+            echo "method=wrangler-key" >> "$GITHUB_OUTPUT"
+            echo "Direct upload is available through legacy Cloudflare API key authentication."
           elif [ -n "$CF_DEPLOY_HOOK" ]; then
             echo "method=hook" >> "$GITHUB_OUTPUT"
             echo "A Cloudflare Pages deploy hook is available."
@@ -78,6 +85,14 @@ jobs:
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.WRANGLER_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN || secrets.CLOUDFLARE_PAGES_TOKEN || vars.CLOUDFLARE_API_TOKEN || vars.CF_API_TOKEN || vars.CLOUDFLARE_PAGES_API_TOKEN || vars.WRANGLER_API_TOKEN || vars.CLOUDFLARE_TOKEN || vars.CF_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || vars.CF_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT || secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT }}
+        run: npx --yes wrangler@4 pages deploy site --project-name=bugcat-capoo-ip-research --branch=main
+
+      - name: Deploy using legacy Cloudflare API key authentication
+        if: steps.cf-route.outputs.method == 'wrangler-key'
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY || secrets.CF_API_KEY || vars.CLOUDFLARE_API_KEY || vars.CF_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL || secrets.CF_EMAIL || secrets.CF_API_EMAIL || vars.CLOUDFLARE_EMAIL || vars.CF_EMAIL || vars.CF_API_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || vars.CF_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT || secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT }}
         run: npx --yes wrangler@4 pages deploy site --project-name=bugcat-capoo-ip-research --branch=main
 
